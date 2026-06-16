@@ -1,5 +1,9 @@
-/* Service worker: offline app shell. Data lives in IndexedDB (not here). */
-const CACHE = 'wardrobe-v1';
+/* Service worker: offline app shell. Data lives in IndexedDB (not here).
+
+   Strategy: NETWORK-FIRST for same-origin requests so a freshly deployed
+   version is always picked up when online; fall back to the cache only when
+   the network is unavailable (offline launch). */
+const CACHE = 'wardrobe-v2';
 const ASSETS = [
   'index.html',
   'css/styles.css',
@@ -12,7 +16,6 @@ const ASSETS = [
 self.addEventListener('install', e => {
   e.waitUntil((async () => {
     const cache = await caches.open(CACHE);
-    // Cache individually so one missing asset doesn't fail the whole install.
     await Promise.allSettled(ASSETS.map(a => cache.add(new Request(a, { cache: 'reload' }))));
     self.skipWaiting();
   })());
@@ -32,17 +35,19 @@ self.addEventListener('fetch', e => {
   const url = new URL(req.url);
   if (url.origin !== location.origin) return;
 
-  if (req.mode === 'navigate') {
-    e.respondWith(caches.match('index.html').then(r => r || fetch(req)));
-    return;
-  }
-  e.respondWith(
-    caches.match(req).then(cached =>
-      cached || fetch(req).then(resp => {
-        const copy = resp.clone();
-        caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
-        return resp;
-      }).catch(() => cached)
-    )
-  );
+  e.respondWith((async () => {
+    try {
+      const resp = await fetch(req);
+      // Refresh the cache with the latest copy for offline use.
+      const copy = resp.clone();
+      caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
+      return resp;
+    } catch {
+      // Offline: serve cached asset, or fall back to the app shell.
+      const cached = await caches.match(req);
+      if (cached) return cached;
+      if (req.mode === 'navigate') return caches.match('index.html');
+      throw new Error('offline and not cached');
+    }
+  })());
 });

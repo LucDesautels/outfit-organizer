@@ -9,7 +9,7 @@ export const state = {
   items: [],
   ecosystems: [],
   fits: [],
-  tax: { types: [], colors: [], styles: [], formality: [] },
+  tax: { types: [], colors: [], styles: [], formality: [], manufacturers: [] },
   settings: { webGroupBy: 'ecosystem' },
 };
 
@@ -45,6 +45,9 @@ function defFormality() {
     'Semi-formal', 'Formal'];
   return names.map((name, i) => ({ id: uid(), name, order: i }));
 }
+function defManufacturers() {
+  return []; // brands are user-defined; starts empty
+}
 
 /* ---- load + seed -------------------------------------------------------- */
 export async function loadAll() {
@@ -57,6 +60,7 @@ export async function loadAll() {
   state.tax.colors = await seedMeta('tax.colors', defColors);
   state.tax.styles = await seedMeta('tax.styles', defStyles);
   state.tax.formality = await seedMeta('tax.formality', defFormality);
+  state.tax.manufacturers = await seedMeta('tax.manufacturers', defManufacturers);
   state.settings = await db.metaGet('settings', state.settings);
 
   resort();
@@ -73,10 +77,9 @@ async function seedMeta(key, factory) {
   return v;
 }
 function resort() {
-  state.tax.types.sort((a, b) => a.order - b.order);
-  state.tax.colors.sort((a, b) => a.order - b.order);
-  state.tax.styles.sort((a, b) => a.order - b.order);
-  state.tax.formality.sort((a, b) => a.order - b.order);
+  for (const k of ['types', 'colors', 'styles', 'formality', 'manufacturers']) {
+    if (Array.isArray(state.tax[k])) state.tax[k].sort((a, b) => (a.order || 0) - (b.order || 0));
+  }
 }
 
 /* ---- change notification ------------------------------------------------ */
@@ -92,6 +95,7 @@ export const typeById = id => state.tax.types.find(x => x.id === id);
 export const colorById = id => state.tax.colors.find(x => x.id === id);
 export const styleById = id => state.tax.styles.find(x => x.id === id);
 export const formalityById = id => state.tax.formality.find(x => x.id === id);
+export const manufacturerById = id => state.tax.manufacturers.find(x => x.id === id);
 
 export const ecosystemsWithItem = id => state.ecosystems.filter(e => (e.itemIds || []).includes(id));
 export const fitsWithItem = id => state.fits.filter(f => (f.itemIds || []).includes(id));
@@ -108,7 +112,7 @@ export async function saveItem(data) {
     rec = {
       id: uid(), createdAt: now, updatedAt: now,
       name: '', typeId: null, image: null,
-      colorIds: [], styleIds: [], formalityId: null,
+      colorIds: [], styleIds: [], formalityId: null, manufacturerId: null,
       status: 'owned', notes: '',
       ...data,
     };
@@ -187,7 +191,7 @@ export async function deleteFit(id) {
 }
 
 /* ---- taxonomy mutators -------------------------------------------------- */
-const TAX_KEY = { types: 'tax.types', colors: 'tax.colors', styles: 'tax.styles', formality: 'tax.formality' };
+const TAX_KEY = { types: 'tax.types', colors: 'tax.colors', styles: 'tax.styles', formality: 'tax.formality', manufacturers: 'tax.manufacturers' };
 
 export async function addTax(kind, fields) {
   const arr = state.tax[kind];
@@ -216,6 +220,7 @@ export async function removeTax(kind, id) {
     let dirty = false;
     if (kind === 'types' && it.typeId === id) { it.typeId = null; dirty = true; }
     if (kind === 'formality' && it.formalityId === id) { it.formalityId = null; dirty = true; }
+    if (kind === 'manufacturers' && it.manufacturerId === id) { it.manufacturerId = null; dirty = true; }
     if (multi[kind] && (it[multi[kind]] || []).includes(id)) {
       it[multi[kind]] = it[multi[kind]].filter(x => x !== id); dirty = true;
     }
@@ -262,11 +267,14 @@ export async function importData(json, { replace = true } = {}) {
   state.ecosystems = data.ecosystems || [];
   state.fits = data.fits || [];
   state.tax = data.tax || state.tax;
+  // tolerate older backups that predate a taxonomy (e.g. manufacturers)
+  for (const k of ['types', 'colors', 'styles', 'formality', 'manufacturers'])
+    if (!Array.isArray(state.tax[k])) state.tax[k] = [];
   state.settings = data.settings || state.settings;
   for (const it of state.items) await db.put('items', it);
   for (const e of state.ecosystems) await db.put('ecosystems', e);
   for (const f of state.fits) await db.put('fits', f);
-  for (const k of ['types', 'colors', 'styles', 'formality'])
+  for (const k of ['types', 'colors', 'styles', 'formality', 'manufacturers'])
     await db.metaSet(TAX_KEY[k], state.tax[k]);
   await db.metaSet('settings', state.settings);
   resort();

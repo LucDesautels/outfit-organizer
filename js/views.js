@@ -3,7 +3,7 @@
    [data-go="view:id"] is handled by a delegated listener in app.js. */
 
 import {
-  state, itemById, ecoById, fitById, typeById, colorById, styleById, formalityById,
+  state, itemById, ecoById, fitById, typeById, colorById, styleById, formalityById, manufacturerById,
   ecosystemsWithItem, fitsWithItem,
   saveItem, deleteItem, saveEcosystem, deleteEcosystem, saveFit, deleteFit,
   addTax, updateTax, removeTax, reorderTax, setSetting, exportData, importData,
@@ -305,6 +305,8 @@ function openItemEditor(id) {
 
   const typeSel = tokenGroup({ kind: 'types', selected: ex?.typeId ? [ex.typeId] : [], multi: false });
   body.appendChild(fieldEl('Type', typeSel));
+  const manuSel = tokenGroup({ kind: 'manufacturers', selected: ex?.manufacturerId ? [ex.manufacturerId] : [], multi: false });
+  body.appendChild(fieldEl('Manufacturer', manuSel));
   const colorSel = tokenGroup({ kind: 'colors', selected: ex?.colorIds || [], multi: true });
   body.appendChild(fieldEl('Colour(s)', colorSel));
   const styleSel = tokenGroup({ kind: 'styles', selected: ex?.styleIds || [], multi: true });
@@ -326,6 +328,7 @@ function openItemEditor(id) {
       name: body.querySelector('#f-name').value.trim(),
       image: imgVal,
       typeId: typeSel.getSelected()[0] || null,
+      manufacturerId: manuSel.getSelected()[0] || null,
       colorIds: colorSel.getSelected(),
       styleIds: styleSel.getSelected(),
       formalityId: formSel.getSelected()[0] || null,
@@ -352,6 +355,7 @@ function viewItem(id) {
     actions: [iconBtn('edit', () => openItemEditor(it.id), 'Edit')],
   });
   const type = typeById(it.typeId);
+  const manu = manufacturerById(it.manufacturerId);
   const colors = (it.colorIds || []).map(colorById).filter(Boolean);
   const styles = (it.styleIds || []).map(styleById).filter(Boolean);
   const form = formalityById(it.formalityId);
@@ -362,6 +366,7 @@ function viewItem(id) {
     <div class="detail-hero">${it.image ? `<img src="${it.image}" alt="">` : phHtml()}</div>
     <div class="metalist">
       <div class="metarow"><div class="k">Type</div><div class="v">${type ? `<span class="tag">${esc(type.name)}</span>` : '<span class="muted">—</span>'}</div></div>
+      <div class="metarow"><div class="k">Manufacturer</div><div class="v">${manu ? `<span class="tag">${esc(manu.name)}</span>` : '<span class="muted">—</span>'}</div></div>
       <div class="metarow"><div class="k">Colour</div><div class="v">${colors.length ? colors.map(c => `<span class="tag">${swatchHtml(c)}${esc(c.name)}</span>`).join('') : '<span class="muted">—</span>'}</div></div>
       <div class="metarow"><div class="k">Style</div><div class="v">${styles.length ? styles.map(s => `<span class="tag">${esc(s.name)}</span>`).join('') : '<span class="muted">—</span>'}</div></div>
       <div class="metarow"><div class="k">Formality</div><div class="v">${form ? `<span class="tag">${esc(form.name)}</span>` : '<span class="muted">—</span>'}</div></div>
@@ -890,7 +895,7 @@ function viewWeb() {
 function openTaxEditor(kind, rec) {
   return new Promise(resolve => {
     const isColor = kind === 'colors';
-    const labelMap = { types: 'Type', colors: 'Colour', styles: 'Style', formality: 'Formality level' };
+    const labelMap = { types: 'Type', colors: 'Colour', styles: 'Style', formality: 'Formality level', manufacturers: 'Manufacturer' };
     const body = node(`<div>
       <div class="field"><label>Name</label><input class="input" id="t-name" value="${esc(rec?.name || '')}" placeholder="${labelMap[kind]}"></div>
       ${isColor ? `<div class="field"><label>Swatch</label><input type="color" id="t-color" value="${esc(rec && rec.hex !== 'mix' ? rec.hex : '#888888')}" style="width:54px;height:40px;border:0;background:none;padding:0"></div>` : ''}
@@ -922,8 +927,9 @@ function viewSettings() {
   const groups = [
     ['types', 'Types', 'Clothing categories. Order ≈ layering.', false, true],
     ['formality', 'Formality', 'From pajamas to formal — order matters.', false, true],
-    ['colors', 'Colours', 'Palette used to tag pieces and fits.', true, false],
-    ['styles', 'Styles', 'Aesthetics like old money or techwear.', false, false],
+    ['manufacturers', 'Manufacturers', 'Brands / makers of your pieces. Add as many as you like.', false, true],
+    ['colors', 'Colours', 'Palette used to tag pieces and fits.', true, true],
+    ['styles', 'Styles', 'Aesthetics like old money or techwear.', false, true],
   ];
   for (const [kind, title, desc, withSwatch, sortable] of groups) {
     const sec = node(`<div class="tax-group"></div>`);
