@@ -3,7 +3,7 @@
    [data-go="view:id"] is handled by a delegated listener in app.js. */
 
 import {
-  state, itemById, ecoById, fitById, typeById, colorById, styleById, formalityById, manufacturerById,
+  state, itemById, ecoById, fitById, typeById, colorById, styleById, formalityById, manufacturerById, materialById,
   ecosystemsWithItem, fitsWithItem,
   saveItem, deleteItem, archiveItemLink, saveEcosystem, deleteEcosystem, saveFit, deleteFit,
   addTax, updateTax, removeTax, reorderTax, setSetting, exportData, importData,
@@ -355,6 +355,8 @@ function openItemEditor(id) {
   body.appendChild(fieldEl('Manufacturer', manuSel));
   const colorSel = tokenGroup({ kind: 'colors', selected: ex?.colorIds || [], multi: true });
   body.appendChild(fieldEl('Colour(s)', colorSel));
+  const materialSel = tokenGroup({ kind: 'materials', selected: ex?.materialIds || [], multi: true });
+  body.appendChild(fieldEl('Material(s)', materialSel));
   const styleSel = tokenGroup({ kind: 'styles', selected: ex?.styleIds || [], multi: true });
   body.appendChild(fieldEl('Style', styleSel));
   const formSel = tokenGroup({ kind: 'formality', selected: ex?.formalityId ? [ex.formalityId] : [], multi: false });
@@ -377,6 +379,7 @@ function openItemEditor(id) {
       typeId: typeSel.getSelected()[0] || null,
       manufacturerId: manuSel.getSelected()[0] || null,
       colorIds: colorSel.getSelected(),
+      materialIds: materialSel.getSelected(),
       styleIds: styleSel.getSelected(),
       formalityId: formSel.getSelected()[0] || null,
       status: statusEl.getValue(),
@@ -408,6 +411,7 @@ function viewItem(id) {
   const type = typeById(it.typeId);
   const manu = manufacturerById(it.manufacturerId);
   const colors = (it.colorIds || []).map(colorById).filter(Boolean);
+  const materials = (it.materialIds || []).map(materialById).filter(Boolean);
   const styles = (it.styleIds || []).map(styleById).filter(Boolean);
   const form = formalityById(it.formalityId);
   const ecos = ecosystemsWithItem(it.id);
@@ -419,6 +423,7 @@ function viewItem(id) {
       <div class="metarow"><div class="k">Type</div><div class="v">${type ? `<span class="tag">${esc(type.name)}</span>` : '<span class="muted">—</span>'}</div></div>
       <div class="metarow"><div class="k">Manufacturer</div><div class="v">${manu ? `<span class="tag">${esc(manu.name)}</span>` : '<span class="muted">—</span>'}</div></div>
       <div class="metarow"><div class="k">Colour</div><div class="v">${colors.length ? colors.map(c => `<span class="tag">${swatchHtml(c)}${esc(c.name)}</span>`).join('') : '<span class="muted">—</span>'}</div></div>
+      <div class="metarow"><div class="k">Material</div><div class="v">${materials.length ? materials.map(m => `<span class="tag">${esc(m.name)}</span>`).join('') : '<span class="muted">—</span>'}</div></div>
       <div class="metarow"><div class="k">Style</div><div class="v">${styles.length ? styles.map(s => `<span class="tag">${esc(s.name)}</span>`).join('') : '<span class="muted">—</span>'}</div></div>
       <div class="metarow"><div class="k">Formality</div><div class="v">${form ? `<span class="tag">${esc(form.name)}</span>` : '<span class="muted">—</span>'}</div></div>
       <div class="metarow"><div class="k">Status</div><div class="v"><span class="tag">${it.status === 'wishlist' ? 'Wishlist' : 'Owned'}</span></div></div>
@@ -1004,7 +1009,7 @@ function viewWeb() {
 function openTaxEditor(kind, rec) {
   return new Promise(resolve => {
     const isColor = kind === 'colors';
-    const labelMap = { types: 'Type', colors: 'Colour', styles: 'Style', formality: 'Formality level', manufacturers: 'Manufacturer' };
+    const labelMap = { types: 'Type', colors: 'Colour', styles: 'Style', formality: 'Formality level', manufacturers: 'Manufacturer', materials: 'Material' };
     const body = node(`<div>
       <div class="field"><label>Name</label><input class="input" id="t-name" value="${esc(rec?.name || '')}" placeholder="${labelMap[kind]}"></div>
       ${isColor ? `<div class="field"><label>Swatch</label><input type="color" id="t-color" value="${esc(rec && rec.hex !== 'mix' ? rec.hex : '#888888')}" style="width:54px;height:40px;border:0;background:none;padding:0"></div>` : ''}
@@ -1040,6 +1045,7 @@ function viewSettings() {
     ['formality', 'Formality', 'From pajamas to formal — order matters.', false, true],
     ['manufacturers', 'Manufacturers', 'Brands / makers of your pieces. Add as many as you like.', false, true],
     ['colors', 'Colours', 'Palette used to tag pieces and fits.', true, true],
+    ['materials', 'Materials', 'Fabrics — linen, wool, denim, etc.', false, true],
     ['styles', 'Styles', 'Aesthetics like old money or techwear.', false, true],
   ];
   for (const [kind, title, desc, withSwatch, sortable] of groups) {
