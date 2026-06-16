@@ -48,7 +48,11 @@ export function openSheet({ title, bodyEl, footEl }) {
   }
   root.appendChild(scrim);
   root.appendChild(sheet);
-  requestAnimationFrame(() => { scrim.classList.add('show'); sheet.classList.add('show'); });
+  // Force a reflow so the hidden starting transform is committed, then animate
+  // in synchronously. Relying on requestAnimationFrame here is unreliable — it
+  // can be throttled/deferred, leaving the sheet stuck off-screen below the fold.
+  void sheet.offsetHeight;
+  scrim.classList.add('show'); sheet.classList.add('show');
 
   const ctrl = { onDismiss: null, el: sheet, body };
   const reg = { requestClose: () => close(true) };
@@ -62,7 +66,11 @@ export function openSheet({ title, bodyEl, footEl }) {
     if (fromUser && ctrl.onDismiss) ctrl.onDismiss();
   }
   ctrl.close = () => close(false);
-  scrim.addEventListener('click', () => close(true));
+  // Ignore scrim clicks fired in the first moments after opening: on touch
+  // devices the same tap that opened the sheet can "pass through" to the
+  // freshly-shown scrim and close it instantly.
+  const openedAt = Date.now();
+  scrim.addEventListener('click', () => { if (Date.now() - openedAt < 300) return; close(true); });
   sheet.querySelector('.close-x').addEventListener('click', () => close(true));
   return ctrl;
 }

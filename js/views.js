@@ -335,6 +335,8 @@ function openItemEditor(id) {
       status: statusEl.getValue(),
       notes: body.querySelector('#f-notes').value.trim(),
     };
+    // Don't create an empty placeholder piece (e.g. from an accidental tap).
+    if (!data.name && !data.image && !data.typeId) { toast('Add a name, photo or type first'); return; }
     await saveItem(data);
     ctrl.close(); toast(ex ? 'Saved' : 'Piece added'); nav.rerender();
   };

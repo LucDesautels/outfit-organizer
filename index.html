@@ -34,7 +34,13 @@
     // Register the service worker for offline + installability.
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js').catch(() => {});
+        navigator.serviceWorker.register('sw.js').then(reg => reg.update()).catch(() => {});
+      });
+      // When a new version takes control, reload once so the latest code/styles
+      // are applied immediately instead of staying on a stale cached version.
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (refreshing) return; refreshing = true; window.location.reload();
       });
     }
   </script>
