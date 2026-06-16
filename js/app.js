@@ -82,6 +82,11 @@ document.getElementById('app').addEventListener('click', e => {
 
 /* ---- init -------------------------------------------------------------- */
 async function init() {
+  // Ask the browser to keep our data durable (won't be evicted under storage
+  // pressure). Best-effort; granted automatically once the app is installed.
+  if (navigator.storage && navigator.storage.persist) {
+    navigator.storage.persisted().then(p => { if (!p) navigator.storage.persist().catch(() => {}); });
+  }
   buildTabs();
   await loadAll();
   history.replaceState({ route: currentRoute }, '');
