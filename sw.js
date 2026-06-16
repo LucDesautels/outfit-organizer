@@ -3,7 +3,7 @@
    Strategy: NETWORK-FIRST for same-origin requests so a freshly deployed
    version is always picked up when online; fall back to the cache only when
    the network is unavailable (offline launch). */
-const CACHE = 'wardrobe-v5';
+const CACHE = 'wardrobe-v6';
 const ASSETS = [
   'index.html',
   'css/styles.css',

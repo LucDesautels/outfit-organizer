@@ -143,7 +143,7 @@ export async function saveItem(data) {
   } else {
     rec = {
       id: uid(), createdAt: now, updatedAt: now,
-      name: '', typeId: null, image: null,
+      name: '', typeId: null, image: null, cutout: null,
       colorIds: [], styleIds: [], formalityId: null, manufacturerId: null, materialIds: [],
       status: 'owned', notes: '',
       link: '', archivedLink: '', archiveStatus: 'none',

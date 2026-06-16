@@ -411,6 +411,13 @@ select.select { -webkit-appearance: none; appearance: none;
 .slot-hint { margin-left: 8px; font-style: normal; font-size: 11px; letter-spacing: .12em;
   text-transform: uppercase; color: var(--faint); }
 
+/* mockup texture row in the item editor */
+.texset { display: flex; align-items: center; gap: 12px; }
+.texthumb { width: 46px; height: 46px; border-radius: 8px; overflow: hidden; flex: 0 0 auto;
+  background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
+.texthumb img { width: 100%; height: 100%; object-fit: cover; }
+.texset .btn { flex: 0 0 auto; }
+
 /* full-screen overlay (cropper, web inspector) */
 .fs {
   position:absolute; inset:0; background: #0d0d0d; color:#fff;

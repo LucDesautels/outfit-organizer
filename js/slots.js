@@ -53,3 +53,23 @@ export const SLOT_GLYPH = {
   none:   'M11 3h3l7 7-8 8-7-7v-3l5-5z M9 8h.01',
 };
 export function slotGlyph(slot) { return SLOT_GLYPH[slot] || SLOT_GLYPH.none; }
+
+/* Garment silhouettes for the figure: a path in its own local box, plus where
+   that box sits on the 200×360 figure. Used both as the crop guide and as the
+   shape the piece's texture/colour fills in the mockup. Only "paintable" slots
+   appear here; others render as simple coloured marks. (local box == figure box
+   so the path just needs translating, never scaling.) */
+export const GARMENT = {
+  head:   { w: 72,  h: 40,  box: { x: 64, y: 20,  w: 72,  h: 40 },
+    path: 'M4 36 Q4 6 36 6 Q68 6 68 36 Z M36 30 H72 V38 H36 Z' },
+  top:    { w: 116, h: 124, box: { x: 42, y: 70,  w: 116, h: 124 },
+    path: 'M30 6 Q58 22 86 6 L116 22 L100 50 L88 42 L88 120 L28 120 L28 42 L16 50 L0 22 Z' },
+  outer:  { w: 132, h: 156, box: { x: 34, y: 68,  w: 132, h: 156 },
+    path: 'M34 6 Q66 20 98 6 L132 26 L116 64 L104 56 L104 150 L28 150 L28 56 L16 64 L0 26 Z' },
+  bottom: { w: 72,  h: 158, box: { x: 64, y: 178, w: 72,  h: 158 },
+    path: 'M2 4 H70 L66 156 L42 156 L36 70 L30 156 L6 156 Z' },
+  feet:   { w: 84,  h: 24,  box: { x: 58, y: 326, w: 84,  h: 24 },
+    path: 'M2 22 Q2 6 18 6 L34 6 L40 16 L40 22 Z M44 22 L44 16 L50 6 L66 6 Q82 6 82 22 Z' },
+};
+export function garmentFor(slot) { return GARMENT[slot] || null; }
+

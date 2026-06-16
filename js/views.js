@@ -17,7 +17,7 @@ import { processFile, cropToDataUrl } from './image.js';
 import { nav } from './nav.js';
 import { mountWeb } from './web.js';
 import { figureSvg } from './figure.js';
-import { SLOTS, SLOT_LABEL, slotForType } from './slots.js';
+import { SLOTS, SLOT_LABEL, slotForType, garmentFor } from './slots.js';
 
 /* ===== shared helpers ==================================================== */
 function setTopbar({ title, subtitle, leading, actions = [] }) {
@@ -343,14 +343,50 @@ function openWardrobeFilter() {
 function openItemEditor(id) {
   const ex = id ? itemById(id) : null;
   let imgVal = ex ? ex.image : null;
+  let cutoutVal = ex ? (ex.cutout || null) : null;
+  let onImg = () => {};
+  const NOUN = { head: 'hat', top: 'shirt', outer: 'coat', bottom: 'pants', feet: 'shoes' };
   const body = node(`<div></div>`);
 
-  const imgF = imageField(imgVal, { onChange: v => { imgVal = v; } });
+  const imgF = imageField(imgVal, { onChange: v => { imgVal = v; onImg(v); } });
   body.appendChild(fieldEl('Photo', imgF));
+  const texRow = node(`<div class="texrow"></div>`);
+  body.appendChild(fieldEl('Mockup texture', texRow));
   body.appendChild(field('Name', `<input class="input" id="f-name" value="${esc(ex?.name || '')}" placeholder="e.g. Black linen overcoat">`));
 
   const typeSel = tokenGroup({ kind: 'types', selected: ex?.typeId ? [ex.typeId] : [], multi: false });
   body.appendChild(fieldEl('Type', typeSel));
+
+  // mockup texture: crop the photo onto the garment shape used by the figure
+  const selectedSlot = () => slotForType(typeById(typeSel.getSelected()[0]));
+  async function runGarmentCrop() {
+    const slot = selectedSlot(), g = garmentFor(slot);
+    if (!imgVal || !g) return;
+    const rect = await cropImage(imgVal, { title: 'Crop to ' + (NOUN[slot] || 'garment'), guide: { path: g.path, w: g.w, h: g.h } });
+    if (rect) { cutoutVal = await cropToDataUrl(imgVal, rect); toast('Mockup texture set'); }
+    renderTex();
+  }
+  function renderTex() {
+    texRow.innerHTML = '';
+    const slot = selectedSlot(), g = garmentFor(slot);
+    if (!imgVal) return texRow.appendChild(node(`<p class="note">Add a photo to crop a textured mockup.</p>`));
+    if (!g) return texRow.appendChild(node(`<p class="note">This type shows as a solid colour in the figure mockup.</p>`));
+    if (cutoutVal) {
+      const rowEl = node(`<div class="texset"><span class="texthumb"><img src="${cutoutVal}"></span>
+        <button type="button" class="btn ghost sm" data-a="redo">${icon('crop')} Re-crop</button>
+        <button type="button" class="linklike" data-a="rm">Remove</button></div>`);
+      rowEl.querySelector('[data-a=redo]').onclick = runGarmentCrop;
+      rowEl.querySelector('[data-a=rm]').onclick = () => { cutoutVal = null; renderTex(); };
+      texRow.appendChild(rowEl);
+    } else {
+      const b = node(`<button type="button" class="btn ghost block" data-a="set">${icon('crop')} Crop onto ${esc(NOUN[slot] || 'garment')}</button>`);
+      b.onclick = runGarmentCrop;
+      texRow.appendChild(b);
+    }
+  }
+  onImg = v => { if (!v) cutoutVal = null; renderTex(); if (v && garmentFor(selectedSlot())) runGarmentCrop(); };
+  typeSel.addEventListener('click', () => renderTex());
+  renderTex();
   const manuSel = tokenGroup({ kind: 'manufacturers', selected: ex?.manufacturerId ? [ex.manufacturerId] : [], multi: false });
   body.appendChild(fieldEl('Manufacturer', manuSel));
   const colorSel = tokenGroup({ kind: 'colors', selected: ex?.colorIds || [], multi: true });
@@ -376,6 +412,7 @@ function openItemEditor(id) {
       id: ex?.id,
       name: body.querySelector('#f-name').value.trim(),
       image: imgVal,
+      cutout: cutoutVal,
       typeId: typeSel.getSelected()[0] || null,
       manufacturerId: manuSel.getSelected()[0] || null,
       colorIds: colorSel.getSelected(),

@@ -145,15 +145,15 @@ export function pickFile({ camera = false } = {}) {
 }
 
 /* ---- cropper (full screen, touch) -------------------------------------- */
-export function cropImage(srcDataUrl) {
+export function cropImage(srcDataUrl, opts = {}) {
   return new Promise(async resolve => {
     pushOverlay();
     const img = await dataUrlToImage(srcDataUrl);
     const fs = node(`<div class="fs">
       <div class="fs-head">
         <button class="x">Cancel</button>
-        <div class="t">Crop</div>
-        <button class="ok">Use</button>
+        <div class="t">${esc(opts.title || 'Crop')}</div>
+        <button class="ok">${esc(opts.okLabel || 'Use')}</button>
       </div>
       <div class="fs-stage"></div>
     </div>`);
@@ -161,11 +161,14 @@ export function cropImage(srcDataUrl) {
     overlayRoot().appendChild(fs);
     const reg = { requestClose: () => finish(false) };
     registerOverlay(reg);
-    requestAnimationFrame(() => fs.classList.add('show'));
+    // Apply the shown state + build synchronously (forced reflow) — rAF can be
+    // throttled and leave the cropper invisible / unbuilt.
+    void fs.offsetHeight;
+    fs.classList.add('show');
 
     let imgEl, box, disp;
-    // Build after layout so stage has size.
-    requestAnimationFrame(() => requestAnimationFrame(build));
+    void stage.offsetWidth;
+    build();
 
     function build() {
       const sw = stage.clientWidth, sh = stage.clientHeight;
@@ -185,6 +188,11 @@ export function cropImage(srcDataUrl) {
         ${['tl', 'tr', 'bl', 'br'].map(h => `<span class="h ${h}" data-h="${h}"></span>`).join('')}
         <span class="g" style="position:absolute;inset:0;border:1px solid rgba(255,255,255,.35)"></span>
       </div>`);
+      if (opts.guide) {
+        const g = opts.guide;
+        box.appendChild(node(`<svg class="cropguide" viewBox="0 0 ${g.w} ${g.h}" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible">
+          <path d="${g.path}" fill="rgba(255,255,255,.16)" stroke="rgba(255,255,255,.92)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`));
+      }
       stage.appendChild(box);
       styleHandles(box);
       place(cb);
