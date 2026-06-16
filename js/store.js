@@ -4,6 +4,7 @@
 
 import * as db from './db.js';
 import { uid } from './util.js';
+import { archiveUrl } from './archive.js';
 
 export const state = {
   items: [],
@@ -105,7 +106,13 @@ export async function saveItem(data) {
   const now = Date.now();
   let rec;
   if (data.id) {
-    rec = { ...itemById(data.id), ...data, updatedAt: now };
+    const prev = itemById(data.id);
+    rec = { ...prev, ...data, updatedAt: now };
+    // If the product link changed, drop the stale archive and re-archive.
+    if (data.link !== undefined && data.link !== prev.link) {
+      rec.archivedLink = '';
+      rec.archiveStatus = data.link ? 'pending' : 'none';
+    }
     const i = state.items.findIndex(x => x.id === data.id);
     state.items[i] = rec;
   } else {
@@ -114,8 +121,10 @@ export async function saveItem(data) {
       name: '', typeId: null, image: null,
       colorIds: [], styleIds: [], formalityId: null, manufacturerId: null,
       status: 'owned', notes: '',
+      link: '', archivedLink: '', archiveStatus: 'none',
       ...data,
     };
+    if (rec.link) rec.archiveStatus = 'pending';
     state.items.unshift(rec);
   }
   await db.put('items', rec);
@@ -139,6 +148,29 @@ export async function deleteItem(id) {
     }
   }
   emit();
+}
+
+/* Resolve a Wayback snapshot for an item's product link and persist it.
+   Best-effort, in-flight-guarded; safe to call repeatedly. */
+const archiving = new Set();
+export async function archiveItemLink(id) {
+  if (archiving.has(id)) return;
+  const it = itemById(id);
+  if (!it || !it.link || it.archivedLink) return;
+  archiving.add(id);
+  if (it.archiveStatus !== 'pending') { it.archiveStatus = 'pending'; await db.put('items', it); emit(); }
+  try {
+    const link = it.link;
+    const archived = await archiveUrl(link);
+    const cur = itemById(id);
+    if (!cur || cur.link !== link) return; // item changed/deleted meanwhile
+    cur.archivedLink = archived || '';
+    cur.archiveStatus = archived ? 'archived' : 'failed';
+    await db.put('items', cur);
+    emit();
+  } finally {
+    archiving.delete(id);
+  }
 }
 
 /* ---- ecosystems --------------------------------------------------------- */

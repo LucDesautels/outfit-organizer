@@ -5,9 +5,10 @@
 import {
   state, itemById, ecoById, fitById, typeById, colorById, styleById, formalityById, manufacturerById,
   ecosystemsWithItem, fitsWithItem,
-  saveItem, deleteItem, saveEcosystem, deleteEcosystem, saveFit, deleteFit,
+  saveItem, deleteItem, archiveItemLink, saveEcosystem, deleteEcosystem, saveFit, deleteFit,
   addTax, updateTax, removeTax, reorderTax, setSetting, exportData, importData,
 } from './store.js';
+import { savePageUrl } from './archive.js';
 import {
   toast, openSheet, confirmDialog, promptDialog, pickFile, cropImage, swatchHtml, phHtml,
 } from './ui.js';
@@ -65,6 +66,41 @@ function sortItemsByType(items) {
   return items.slice().sort((a, b) => typeOrder(a) - typeOrder(b));
 }
 function itemsOf(ids) { return (ids || []).map(itemById).filter(Boolean); }
+
+/* Normalise a typed product link; only http/https are allowed to be clickable. */
+function normLink(s) { s = (s || '').trim(); if (!s) return ''; return /^https?:\/\//i.test(s) ? s : 'https://' + s; }
+function safeUrl(u) { try { const x = new URL(u); return (x.protocol === 'http:' || x.protocol === 'https:') ? x.href : null; } catch { return null; } }
+function hostOf(u) { try { return new URL(u).host.replace(/^www\./, ''); } catch { return u; } }
+function maybeRerender(id) { const r = nav.current(); if (r.view === 'item' && r.id === id) nav.rerender(); }
+
+/* Product link block for the item detail page: prefers the archived snapshot. */
+function productBlock(it) {
+  const live = safeUrl(it.link);
+  if (!live) return null;
+  const archived = safeUrl(it.archivedLink);
+  const wrap = node(`<div class="product"></div>`);
+
+  const a = node(`<a class="btn block" target="_blank" rel="noopener noreferrer">${icon('link')} ${archived ? 'Open archived copy' : 'Visit product'}</a>`);
+  a.href = archived || live;
+  wrap.appendChild(a);
+
+  const sub = node(`<div class="product-sub"></div>`);
+  sub.appendChild(node(`<span class="host">${esc(hostOf(it.link))}</span>`));
+  if (archived) {
+    sub.appendChild(node(`<span class="ok">${icon('archive')} archived</span>`));
+    const liveA = node(`<a class="linklike" target="_blank" rel="noopener noreferrer">live site</a>`); liveA.href = live;
+    sub.appendChild(liveA);
+  } else if (it.archiveStatus === 'pending') {
+    sub.appendChild(node(`<span class="muted">archiving…</span>`));
+  } else {
+    const arc = node(`<a class="linklike" target="_blank" rel="noopener noreferrer">archive now</a>`);
+    arc.href = savePageUrl(live);
+    arc.addEventListener('click', () => setTimeout(() => archiveItemLink(it.id).then(() => maybeRerender(it.id)), 2000));
+    sub.appendChild(arc);
+  }
+  wrap.appendChild(sub);
+  return wrap;
+}
 
 function collageHtml(items) {
   const list = sortItemsByType(items).slice(0, 9);
@@ -315,6 +351,7 @@ function openItemEditor(id) {
   body.appendChild(fieldEl('Formality', formSel));
   const statusEl = segmented(['owned', 'wishlist'], ex?.status || 'owned', ['Owned', 'Wishlist']);
   body.appendChild(fieldEl('Status', statusEl));
+  body.appendChild(field('Product link', `<input class="input" id="f-link" type="url" inputmode="url" autocapitalize="off" spellcheck="false" value="${esc(ex?.link || '')}" placeholder="https://… (auto-archived)">`));
   body.appendChild(field('Notes', `<textarea class="textarea" id="f-notes" placeholder="Optional notes">${esc(ex?.notes || '')}</textarea>`));
 
   const foot = node(`<div style="display:flex;gap:10px;width:100%">
@@ -333,11 +370,13 @@ function openItemEditor(id) {
       styleIds: styleSel.getSelected(),
       formalityId: formSel.getSelected()[0] || null,
       status: statusEl.getValue(),
+      link: normLink(body.querySelector('#f-link').value),
       notes: body.querySelector('#f-notes').value.trim(),
     };
     // Don't create an empty placeholder piece (e.g. from an accidental tap).
-    if (!data.name && !data.image && !data.typeId) { toast('Add a name, photo or type first'); return; }
-    await saveItem(data);
+    if (!data.name && !data.image && !data.typeId && !data.link) { toast('Add a name, photo or type first'); return; }
+    const rec = await saveItem(data);
+    if (rec.link && rec.archiveStatus === 'pending') archiveItemLink(rec.id); // background
     ctrl.close(); toast(ex ? 'Saved' : 'Piece added'); nav.rerender();
   };
   if (ex) foot.querySelector('[data-a=del]').onclick = async () => {
@@ -376,6 +415,13 @@ function viewItem(id) {
       ${it.notes ? `<div class="metarow"><div class="k">Notes</div><div class="v" style="display:block">${esc(it.notes)}</div></div>` : ''}
     </div>
   </div>`);
+
+  const pb = productBlock(it);
+  if (pb) root.appendChild(pb);
+  // Resolve the archived snapshot in the background, then refresh this page.
+  if (it.link && !it.archivedLink && it.archiveStatus !== 'failed') {
+    archiveItemLink(it.id).then(() => maybeRerender(it.id));
+  }
 
   const build = node(`<button class="btn block" style="margin-top:18px" data-a="build">${icon('outfit')} Build a fit with this</button>`);
   build.onclick = () => openFitBuilderWith([it.id]);

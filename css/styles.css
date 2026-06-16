@@ -390,6 +390,17 @@ select.select { -webkit-appearance: none; appearance: none;
 }
 .sheet .sheet-foot .btn { flex: 1; }
 
+/* ---- product link / archive (item detail) ------------------------------ */
+.product { margin-top: 16px; }
+.product-sub { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 9px; font-size: 12.5px; letter-spacing: .01em; }
+.product-sub .host { color: var(--ink-2); }
+.product-sub .muted { color: var(--muted); }
+.product-sub .ok { color: var(--gold); display: inline-flex; align-items: center; gap: 5px; }
+.product-sub .ok svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.7;
+  stroke-linecap: round; stroke-linejoin: round; }
+.product-sub .linklike { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+
 /* full-screen overlay (cropper, web inspector) */
 .fs {
   position:absolute; inset:0; background: #0d0d0d; color:#fff;
