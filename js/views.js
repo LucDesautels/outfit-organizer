@@ -16,6 +16,8 @@ import { icon, esc, node } from './util.js';
 import { processFile, cropToDataUrl } from './image.js';
 import { nav } from './nav.js';
 import { mountWeb } from './web.js';
+import { figureSvg } from './figure.js';
+import { SLOTS, SLOT_LABEL, slotForType } from './slots.js';
 
 /* ===== shared helpers ==================================================== */
 function setTopbar({ title, subtitle, leading, actions = [] }) {
@@ -108,6 +110,14 @@ function collageHtml(items) {
   const n = list.length;
   return `<div class="collage n${n}">${list.map(it =>
     `<div class="cell">${it.image ? `<img src="${it.image}" alt="">` : phHtml()}</div>`).join('')}</div>`;
+}
+
+/* A fit's visual: the uploaded worn photo if there is one, else the paper-doll. */
+function fitFigure(itemIds) {
+  return `<div class="figwrap">${figureSvg(sortItemsByType(itemsOf(itemIds)), typeOrder)}</div>`;
+}
+function fitVisual(f) {
+  return f.photo ? `<img class="worn" src="${f.photo}" alt="">` : fitFigure(f.itemIds);
 }
 
 /* token multi/single selector backed by a taxonomy */
@@ -508,6 +518,16 @@ function viewEcosystem(id) {
   if (items.length) root.appendChild(node(`<div class="grid">${items.map(itemCardHtml).join('')}</div>`));
   else root.appendChild(node(`<p class="note">No pieces yet — tap edit to add some.</p>`));
 
+  // fits made from these pieces (auto-matched) plus any manually pinned, top-rated first
+  const ecoFits = fitsForEcosystem(e);
+  const addFit = iconBtn('plus', () => openFitPicker({
+    title: 'Pin fits to this ecosystem', preselected: e.fitIds || [],
+    onConfirm: async ids => { await saveEcosystem({ id: e.id, fitIds: ids }); toast('Updated'); nav.rerender(); },
+  }), 'Add fit');
+  root.appendChild(sectionHead('Fits', ecoFits.length, addFit));
+  if (ecoFits.length) root.appendChild(node(`<div class="grid">${ecoFits.map(fitCardHtml).join('')}</div>`));
+  else root.appendChild(node(`<p class="note">No fits yet. Use “Create a fit from this”, or tap ＋ to pin an existing one.</p>`));
+
   root.appendChild(node(`<hr class="divider">`));
   const del = node(`<button class="linklike danger-text">Delete this ecosystem</button>`);
   del.onclick = async () => {
@@ -624,15 +644,56 @@ function openItemPicker({ title = 'Choose pieces', preselected = [], onConfirm }
   foot.querySelector('[data-a=done]').onclick = () => { onConfirm([...sel]); ctrl.close(); };
 }
 
+/* Fits belonging to an ecosystem: every piece is in it (auto) OR pinned via
+   fitIds (manual). Best-rated first. */
+function fitsForEcosystem(e) {
+  const inEco = new Set(e.itemIds || []);
+  const pinned = new Set(e.fitIds || []);
+  const list = state.fits.filter(f =>
+    pinned.has(f.id) ||
+    ((f.itemIds || []).length > 0 && (f.itemIds || []).every(id => inEco.has(id))));
+  return list.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+}
+
+/* Multi-select picker over fits (used to pin outside fits to an ecosystem). */
+function openFitPicker({ title = 'Add fits', preselected = [], onConfirm }) {
+  const sel = new Set(preselected);
+  let q = '';
+  const body = node(`<div>
+    <div class="field" style="margin-bottom:10px"><input class="input" id="fp-q" placeholder="Search fits…"></div>
+    <div class="pick-list" id="fp-list"></div></div>`);
+  const listEl = body.querySelector('#fp-list');
+  body.querySelector('#fp-q').oninput = ev => { q = ev.target.value.trim().toLowerCase(); renderList(); };
+  function renderList() {
+    const fits = state.fits.filter(f => !q || (f.name || '').toLowerCase().includes(q));
+    if (!fits.length) { listEl.innerHTML = `<p class="note" style="grid-column:1/-1">No fits yet.</p>`; return; }
+    listEl.innerHTML = fits.map(f =>
+      `<button class="pick-item ${sel.has(f.id) ? 'selected' : ''}" data-id="${f.id}">
+        <div class="pthumb">${f.photo ? `<img src="${f.photo}">` : fitFigure(f.itemIds)}</div>
+        <div class="pcap"><div class="t">${f.rating != null ? fmtRating(f.rating) + ' / 10' : 'unrated'}</div>${esc(f.name || 'Untitled fit')}</div>
+        <span class="check">${icon('check')}</span></button>`).join('');
+    listEl.querySelectorAll('.pick-item').forEach(b => {
+      b.onclick = () => { const id = b.dataset.id; sel.has(id) ? sel.delete(id) : sel.add(id); b.classList.toggle('selected'); };
+    });
+  }
+  renderList();
+  const foot = node(`<div style="display:flex;gap:10px;width:100%">
+    <button class="btn ghost" data-a="cancel" style="flex:1">Cancel</button>
+    <button class="btn" data-a="done" style="flex:1">Done</button></div>`);
+  const ctrl = openSheet({ title, bodyEl: body, footEl: foot });
+  foot.querySelector('[data-a=cancel]').onclick = () => ctrl.close();
+  foot.querySelector('[data-a=done]').onclick = () => { ctrl.close(); onConfirm([...sel]); };
+}
+
 /* ===== FITS ============================================================= */
-const ff = { colorId: null, styleId: null, formalityId: null, minRating: 0, sort: 'recent' };
+const ff = { colorId: null, styleId: null, formalityId: null, minRating: 0, sort: 'rating' };
 
 function fitCardHtml(f) {
   const items = itemsOf(f.itemIds);
   const style = styleById(f.styleId);
   const form = formalityById(f.formalityId);
   const meta = [style?.name, form?.name].filter(Boolean).join(' · ') || `${items.length} piece${items.length === 1 ? '' : 's'}`;
-  const inner = f.photo ? `<img class="worn" src="${f.photo}" alt="">` : collageHtml(items);
+  const inner = fitVisual(f);
   return `<button class="fit-card" data-go="fit:${f.id}">
     <div class="frame">${inner}${(f.rating != null) ? `<span class="rating-pill">${fmtRating(f.rating)}<small>/10</small></span>` : ''}</div>
     <div class="cap"><div class="nm">${esc(f.name || 'Untitled fit')}</div><div class="meta">${esc(meta)}</div></div>
@@ -724,7 +785,7 @@ function viewFit(id) {
   const items = sortItemsByType(itemsOf(f.itemIds));
   const color = colorById(f.colorId), style = styleById(f.styleId), form = formalityById(f.formalityId);
   const root = node(`<div>
-    <div class="detail-hero">${f.photo ? `<img src="${f.photo}" alt="">` : collageHtml(items)}</div>
+    <div class="detail-hero${f.photo ? '' : ' is-figure'}">${f.photo ? `<img src="${f.photo}" alt="">` : fitFigure(f.itemIds)}</div>
     <div class="row" style="margin:0 2px 4px">
       <div style="flex:1">
         ${(f.rating != null) ? `<div style="font-size:34px;font-weight:300;line-height:1">${fmtRating(f.rating)}<span class="muted" style="font-size:16px"> / 10</span></div>` : `<div class="muted">Not rated</div>`}
@@ -822,7 +883,7 @@ function viewFitBuilder(route) {
     root.innerHTML = '';
     const items = itemsOf(draft.itemIds);
     // preview
-    root.appendChild(node(`<div class="detail-hero" style="aspect-ratio:3/4;max-height:46vh">${draft.photo ? `<img src="${draft.photo}">` : collageHtml(items)}</div>`));
+    root.appendChild(node(`<div class="detail-hero${draft.photo ? '' : ' is-figure'}" style="aspect-ratio:3/4;max-height:46vh">${draft.photo ? `<img src="${draft.photo}">` : fitFigure(draft.itemIds)}</div>`));
 
     root.appendChild(field('Name', `<input class="input" id="fb-name" value="${esc(draft.name || '')}" placeholder="Name this fit">`));
 
@@ -947,6 +1008,7 @@ function openTaxEditor(kind, rec) {
     const body = node(`<div>
       <div class="field"><label>Name</label><input class="input" id="t-name" value="${esc(rec?.name || '')}" placeholder="${labelMap[kind]}"></div>
       ${isColor ? `<div class="field"><label>Swatch</label><input type="color" id="t-color" value="${esc(rec && rec.hex !== 'mix' ? rec.hex : '#888888')}" style="width:54px;height:40px;border:0;background:none;padding:0"></div>` : ''}
+      ${kind === 'types' ? `<div class="field"><label>Figure slot</label><select class="input" id="t-slot">${SLOTS.map(s => `<option value="${s.id}" ${(rec ? slotForType(rec) : 'top') === s.id ? 'selected' : ''}>${esc(s.label)}</option>`).join('')}</select><p class="note" style="margin:6px 2px 0">Where this type sits on the fit mockup figure.</p></div>` : ''}
     </div>`);
     const foot = node(`<div style="display:flex;gap:10px;width:100%">
       <button class="btn ghost" data-a="cancel" style="flex:1">Cancel</button>
@@ -959,6 +1021,7 @@ function openTaxEditor(kind, rec) {
       if (!name) { toast('Enter a name'); return; }
       const fields = { name };
       if (isColor) fields.hex = body.querySelector('#t-color').value;
+      if (kind === 'types') fields.slot = body.querySelector('#t-slot').value;
       answered = true;
       let out;
       if (rec) { await updateTax(kind, rec.id, fields); out = { ...rec, ...fields }; }
@@ -988,7 +1051,7 @@ function viewSettings() {
       const row = node(`<div class="tax-row" data-id="${t.id}">
         ${sortable ? `<span class="drag ed" style="cursor:grab">${icon('drag')}</span>` : ''}
         ${withSwatch ? swatchHtml(t) : ''}
-        <span class="nm">${esc(t.name)}</span>
+        <span class="nm">${esc(t.name)}${kind === 'types' ? `<em class="slot-hint">${esc(slotForType(t))}</em>` : ''}</span>
         <button class="iconbtn ed" data-a="edit">${icon('edit')}</button>
         <button class="iconbtn ed" data-a="del">${icon('trash')}</button>
       </div>`);

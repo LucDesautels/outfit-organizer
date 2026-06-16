@@ -5,6 +5,7 @@
 import * as db from './db.js';
 import { uid } from './util.js';
 import { archiveUrl } from './archive.js';
+import { inferSlot, slotForType } from './slots.js';
 
 export const state = {
   items: [],
@@ -16,13 +17,15 @@ export const state = {
 
 /* ---- default, fully-editable taxonomies -------------------------------- */
 function defTypes() {
-  // Ordered roughly by layer / body position (order matters for collages).
-  const names = [
-    'Hat', 'Base layer', 'T-shirt', 'Shirt', 'Overshirt', 'Sweater',
-    'Overcoat', 'Jacket', 'Rain jacket', 'Coat', 'Winter coat',
-    'Shorts', 'Pants', 'Jeans', 'Socks', 'Shoes', 'Accessory', 'Bag',
+  // Ordered roughly by layer / body position; each maps to a figure slot.
+  const defs = [
+    ['Hat', 'head'], ['Base layer', 'top'], ['T-shirt', 'top'], ['Shirt', 'top'],
+    ['Overshirt', 'top'], ['Sweater', 'top'], ['Overcoat', 'outer'], ['Jacket', 'outer'],
+    ['Rain jacket', 'outer'], ['Coat', 'outer'], ['Winter coat', 'outer'],
+    ['Belt', 'waist'], ['Shorts', 'bottom'], ['Pants', 'bottom'], ['Jeans', 'bottom'],
+    ['Socks', 'socks'], ['Shoes', 'feet'], ['Watch', 'wrist'], ['Accessory', 'none'], ['Bag', 'bag'],
   ];
-  return names.map((name, i) => ({ id: uid(), name, order: i }));
+  return defs.map(([name, slot], i) => ({ id: uid(), name, slot, order: i }));
 }
 function defColors() {
   const list = [
@@ -64,7 +67,22 @@ export async function loadAll() {
   state.tax.manufacturers = await seedMeta('tax.manufacturers', defManufacturers);
   state.settings = await db.metaGet('settings', state.settings);
 
+  await migrateSlots();
   resort();
+}
+
+/* Ensure every type has a figure slot, and add Belt/Watch once for old data. */
+async function migrateSlots() {
+  let dirty = false;
+  for (const t of state.tax.types) if (!t.slot) { t.slot = inferSlot(t.name); dirty = true; }
+  if (!state.settings.seededAccessoryTypes) {
+    const has = slot => state.tax.types.some(t => slotForType(t) === slot);
+    if (!has('waist')) { state.tax.types.push({ id: uid(), name: 'Belt', slot: 'waist', order: state.tax.types.length }); dirty = true; }
+    if (!has('wrist')) { state.tax.types.push({ id: uid(), name: 'Watch', slot: 'wrist', order: state.tax.types.length }); dirty = true; }
+    state.settings = { ...state.settings, seededAccessoryTypes: true };
+    await db.metaSet('settings', state.settings);
+  }
+  if (dirty) await db.metaSet('tax.types', state.tax.types);
 }
 function sortByCreated(arr) {
   return (arr || []).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -182,7 +200,7 @@ export async function saveEcosystem(data) {
     const i = state.ecosystems.findIndex(x => x.id === data.id);
     state.ecosystems[i] = rec;
   } else {
-    rec = { id: uid(), createdAt: now, updatedAt: now, name: '', description: '', itemIds: [], accent: '#141414', ...data };
+    rec = { id: uid(), createdAt: now, updatedAt: now, name: '', description: '', itemIds: [], fitIds: [], accent: '#141414', ...data };
     state.ecosystems.unshift(rec);
   }
   await db.put('ecosystems', rec);

@@ -1,7 +1,11 @@
 /* Force-directed "web" of pieces, grouped by ecosystem or fit.
    Self-contained canvas renderer with pan / pinch-zoom / tap. */
 
-import { state, colorById } from './store.js';
+import { state, colorById, typeById } from './store.js';
+import { slotForType, slotGlyph } from './slots.js';
+
+const glyphCache = {};
+function glyphPath(slot) { return glyphCache[slot] || (glyphCache[slot] = new Path2D(slotGlyph(slot))); }
 
 const PALETTE = ['#b8893b', '#5b6236', '#3a5a86', '#9b3b34', '#5b4a78',
   '#3f6b4a', '#a85c7a', '#7a6a4f', '#456b6e', '#8a5a3c'];
@@ -17,7 +21,6 @@ export function mountWeb(container, { groupBy = 'ecosystem', onSelect } = {}) {
   // ---- build graph ------------------------------------------------------
   const nodes = [];
   const edges = [];
-  const imgCache = new Map();
 
   const groups = groupBy === 'fit' ? state.fits : state.ecosystems;
   const groupNodes = new Map();
@@ -38,12 +41,9 @@ export function mountWeb(container, { groupBy = 'ecosystem', onSelect } = {}) {
     const n = {
       id: 'i:' + it.id, kind: 'item', ref: it, color: hex,
       x: rnd(220), y: rnd(220), vx: 0, vy: 0, r: 16, pinned: false,
-      hasImg: !!it.image,
+      slot: slotForType(typeById(it.typeId)),
     };
     nodes.push(n); itemNodes.set(it.id, n);
-    if (it.image && !imgCache.has(it.id)) {
-      const im = new Image(); im.src = it.image; imgCache.set(it.id, im);
-    }
   });
 
   // edges + degree (for sizing)
@@ -126,21 +126,20 @@ export function mountWeb(container, { groupBy = 'ecosystem', onSelect } = {}) {
       const p = toScreen(n);
       const r = n.r * view.k;
       if (n.kind === 'item') {
-        const im = n.hasImg ? imgCache.get(n.ref.id) : null;
-        if (im && im.complete && im.naturalWidth) {
-          ctx.save();
-          ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.closePath(); ctx.clip();
-          const s = Math.max((2 * r) / im.naturalWidth, (2 * r) / im.naturalHeight);
-          const w = im.naturalWidth * s, h = im.naturalHeight * s;
-          ctx.drawImage(im, p.x - w / 2, p.y - h / 2, w, h);
-          ctx.restore();
-          ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,.85)';
-          ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.stroke();
-        } else {
-          ctx.fillStyle = n.color;
-          ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
-          ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.stroke();
-        }
+        // coloured clothing-type glyph (e.g. a beige overcoat = coat icon, beige)
+        const size = r * 2.3;
+        ctx.fillStyle = 'rgba(255,255,255,.05)';
+        ctx.beginPath(); ctx.arc(p.x, p.y, r * 1.2, 0, Math.PI * 2); ctx.fill();
+        ctx.save();
+        ctx.translate(p.x - size / 2, p.y - size / 2);
+        ctx.scale(size / 24, size / 24);
+        const path = glyphPath(n.slot);
+        ctx.fillStyle = n.color;
+        ctx.fill(path);
+        ctx.lineWidth = 1.5 * (24 / size);
+        ctx.strokeStyle = 'rgba(255,255,255,.6)';
+        ctx.stroke(path);
+        ctx.restore();
       } else {
         // group hub
         ctx.fillStyle = n.color;
